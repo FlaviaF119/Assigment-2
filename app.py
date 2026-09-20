@@ -1,30 +1,14 @@
 import pandas as pd
 import requests
-import seaborn as sns
 import matplotlib.pyplot as plt
 import streamlit as st
 
 
+# API
 DATA_URL = "https://tourism.api.opendatahub.com/v1/Accommodation"
 
 
-def get_municipality(x):
-    if not isinstance(x, dict):
-        return "Unknown"
-
-    municipality_info = x.get("MunicipalityInfo", {})
-
-    if not isinstance(municipality_info, dict):
-        return "Unknown"
-
-    name = municipality_info.get("Name", {})
-
-    if not isinstance(name, dict):
-        return "Unknown"
-
-    return name.get("it", "Unknown")
-
-
+# Download data
 all_items = []
 
 for page in range(1, 18):
@@ -37,94 +21,109 @@ for page in range(1, 18):
         }
     )
 
-    print("Page:", page)
-    print("Status:", response.status_code)
-
-    data = response.json()
-
-    all_items.extend(data["Items"])
+    if response.status_code == 200:
+        data = response.json()
+        all_items.extend(data["Items"])
+    else:
+        st.error("The API is currently unavailable.")
+        st.stop()
 
 
 df = pd.DataFrame(all_items)
 
-print("Dataset shape:", df.shape)
-
-print(
-    "Missing LocationInfo:",
-    df["LocationInfo"].isna().sum()
-)
+if df.empty:
+    st.info("There is currently no data available to display.")
+    st.stop()
 
 
+# Function to get municipality
+def get_municipality(x):
+    try:
+        return x["MunicipalityInfo"]["Name"]["it"]
+    except (TypeError, KeyError):
+        return "Unknown"
+
+
+# Create Municipality column
 df["Municipality"] = df["LocationInfo"].apply(
     get_municipality
 )
 
 
-print(
-    "Missing Municipality:",
-    df["Municipality"].isna().sum()
+# Function to get accommodation type
+def get_accommodation_type(x):
+    try:
+        return x["Id"]
+    except (TypeError, KeyError):
+        return "Unknown"
+
+
+# Create AccommodationType column
+df["AccommodationType"] = df["AccoType"].apply(
+    get_accommodation_type
 )
 
 
+# Count accommodations by municipality
 municipality_counts = df["Municipality"].value_counts()
 
-print("Top 10 municipalities:")
-print(municipality_counts.head(10))
 
-print(
-    "Number of different municipalities:",
-    df["Municipality"].nunique()
-)
-
-
-top15 = municipality_counts.head(15)
-
-plt.figure(figsize=(12, 6))
-
-sns.barplot(
-    x=top15.index,
-    y=top15.values
-)
-
-plt.xlabel("Municipality")
-plt.ylabel("Number of accommodations")
-plt.title("Top 15 Municipalities by Number of Accommodations")
-
-plt.xticks(rotation=45)
-plt.tight_layout()
-
-plt.show()
-
+# -----------------------------
+# STREAMLIT APP
+# -----------------------------
 
 st.title("Accommodation Dashboard")
 
 st.write(
-    "Explore accommodations by municipality."
+    "Explore the types of accommodation available in each municipality."
 )
 
 
+# Choose a municipality
 selected_municipality = st.selectbox(
     "Choose a municipality",
     municipality_counts.index
 )
 
 
+# Filter the data
 filtered_df = df[
     df["Municipality"] == selected_municipality
 ]
 
 
-type_counts = filtered_df["AccoType"].value_counts()
+# Count accommodation types
+type_counts = filtered_df["AccommodationType"].value_counts()
 
 
+# Show chart
 st.subheader(
     f"Accommodation types in {selected_municipality}"
 )
 
 
-st.bar_chart(type_counts)
+fig, ax = plt.subplots(figsize=(10, 6))
+
+ax.bar(
+    type_counts.index,
+    type_counts.values
+)
 
 
+ax.set_xlabel("Accommodation Type")
+ax.set_ylabel("Number of Accommodations")
+
+plt.xticks(
+    rotation=45,
+    ha="right"
+)
+
+plt.tight_layout()
+
+st.pyplot(fig)
+
+
+# Show total number of accommodations
 st.write(
     f"Number of accommodations: {len(filtered_df)}"
 )
