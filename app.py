@@ -127,3 +127,8 @@ st.pyplot(fig)
 st.write(
     f"Number of accommodations: {len(filtered_df)}"
 )
+
+st.info(
+    "Limitation: the API does not provide accommodation prices, "
+    "so the app cannot compare costs between municipalities."
+)
